@@ -365,7 +365,6 @@
 </head>
 <body>
 
-  <!-- ① カメラエリア -->
   <div id="camera-area">
     <div id="camera-placeholder">
       <div class="icon">📷</div>
@@ -376,7 +375,6 @@
     <div id="scan-flash"></div>
   </div>
 
-  <!-- ② 設定バー -->
   <div id="config-bar">
     <div class="config-select-wrap">
       <label>日程</label>
@@ -399,7 +397,6 @@
     <div id="mode-badge">1日目 | OS | 全教室</div>
   </div>
 
-  <!-- ③ 入力カード -->
   <div class="card">
     <h1>イベント当日の受付</h1>
     <div class="input-label">個人番号（4桁）</div>
@@ -412,7 +409,6 @@
     <button id="check-btn" onclick="doCheck()">照会する</button>
   </div>
 
-  <!-- ④ 確認モーダル -->
   <div id="confirmModal" class="modal-overlay">
     <div class="modal-box" id="confirmBox">
       <div id="conf-title-normal" class="modal-title">受付確認</div>
@@ -428,20 +424,17 @@
     </div>
   </div>
 
-  <!-- ⑤ 案内モーダル -->
   <div id="instructionModal" class="modal-overlay">
     <div class="modal-box">
 
-      <!-- 正常 -->
       <div id="ins-normal">
-        <div class="navi-header">受付完了　案内してください</div>
+        <div class="navi-header">受付完了 案内してください</div>
         <div class="navi-box">
           <div class="navi-sub" id="insSubLabel">OS教室 → 班番号</div>
           <div class="navi-value"><span id="insRoom"></span>号室&thinsp;›&thinsp;<span id="insGroup"></span>班</div>
         </div>
       </div>
 
-      <!-- 場所違い -->
       <div id="ins-mismatch" style="display:none">
         <div class="navi-header is-error">⚠️ 正しい場所へ案内してください</div>
         <div class="navi-box is-error">
@@ -450,7 +443,7 @@
         </div>
       </div>
 
-      <button class="btn-next" onclick="reset()">OK（次の受付へ）</button>
+      <button id="btnNext" class="btn-next" onclick="reset()">OK（次の受付へ）</button>
     </div>
   </div>
 
@@ -459,11 +452,36 @@
     // 設定
     // ══════════════════════════════
 
-    // ▼▼▼ GASのWebアプリURLをここに設定 ▼▼▼
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzRfThY1hZkU9CNEkDxHsYFCG2Q_i69LfUkYcCYcB9rXdxUwu0OD5wPn-BVnplaF6t-4g/exec';
+    // ▼▼▼ 再デプロイしたGASのWebアプリURLに書き換えてください ▼▼▼
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbz05WH07tTgTdKeScbYcT9nV_t6T-fn2tbuh13kw5LPiEPyzAfSmJMTy_Ve1DLWJcs__A/exec';
     // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     let currentStudent = null;
+
+    // ══════════════════════════════
+    // エンターキーのグローバル監視
+    // ══════════════════════════════
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        let confirmModal = document.getElementById('confirmModal');
+        let instructionModal = document.getElementById('instructionModal');
+
+        // 案内モーダル（最終画面）が開いている場合
+        if (instructionModal.classList.contains('active')) {
+          e.preventDefault();
+          reset();
+        } 
+        // 確認モーダル（中間画面）が開いている場合
+        else if (confirmModal.classList.contains('active')) {
+          e.preventDefault();
+          let okBtn = document.getElementById('btnOk');
+          // ボタンが連打防止でdisabledになっていない場合のみ発火
+          if (!okBtn.disabled) {
+            approve();
+          }
+        }
+      }
+    });
 
     // ══════════════════════════════
     // カメラ
@@ -471,25 +489,21 @@
     function startCamera() {
       let iframe = document.getElementById('camera-iframe');
       let ph     = document.getElementById('camera-placeholder');
-      // camera.htmlをiframeで読み込む（同じGitHub Pagesドメイン）
       iframe.src = 'camera.html';
       iframe.style.display = 'block';
       ph.style.display = 'none';
     }
 
-    // camera.htmlからのQR読み取り結果を受信
     window.addEventListener('message', function(e) {
       if (!e.data || e.data.type !== 'QR_SCANNED') return;
       let num = String(e.data.num).trim();
       if (!/^\d{4}$/.test(num)) return;
 
-      // フラッシュ表示
       let flash = document.getElementById('scan-flash');
       flash.innerText = '読取: ' + num;
       flash.style.display = 'block';
       setTimeout(function() { flash.style.display = 'none'; }, 1200);
 
-      // 入力欄にセット → 自動照会
       document.getElementById('pNumInput').value = num;
       document.getElementById('pNumInput').classList.add('scanning');
       setTimeout(function() {
@@ -526,7 +540,6 @@
         currentRoom: document.getElementById('configRoom').value.trim()
       };
 
-      // GASをfetchで呼び出す（JSONPスタイル）
       let url = GAS_URL
         + '?action=search'
         + '&pNum=' + encodeURIComponent(pNum)
@@ -552,6 +565,8 @@
       if (result.status === 'NOT_FOUND') {
         alert(result.message);
         document.getElementById('pNumInput').value = '';
+        // フォーカスを戻して連続入力しやすくする
+        document.getElementById('pNumInput').focus();
         return;
       }
 
@@ -586,6 +601,8 @@
       }
 
       document.getElementById('confirmModal').classList.add('active');
+      // モーダルが開いた後、OKボタンにフォーカスを当てておく（Enter対応の保険）
+      setTimeout(() => okBtn.focus(), 50);
     }
 
     function resetBtn() {
@@ -599,6 +616,13 @@
     // ══════════════════════════════
     function approve() {
       if (!currentStudent) return;
+
+      // 【修正】部屋違いの場合はGASに通信せず、リセットして完了させる
+      if (currentStudent.isMismatch) {
+        reset();
+        return;
+      }
+
       let okBtn     = document.getElementById('btnOk');
       let cancelBtn = document.getElementById('btnCancel');
       okBtn.disabled     = true;
@@ -640,21 +664,16 @@
       let normArea = document.getElementById('ins-normal');
       let misArea  = document.getElementById('ins-mismatch');
 
-      if (currentStudent.isMismatch) {
-        normArea.style.display = 'none';
-        misArea.style.display  = 'block';
-        document.getElementById('insCorrectLocation').innerText = currentStudent.correctLocation;
-      } else {
-        normArea.style.display = 'block';
-        misArea.style.display  = 'none';
-        let type = document.getElementById('configType').value;
-        document.getElementById('insSubLabel').innerText = type + '教室 → 班番号';
-        document.getElementById('insRoom').innerText     = currentStudent.room;
-        document.getElementById('insGroup').innerText    = currentStudent.group;
-      }
+      normArea.style.display = 'block';
+      misArea.style.display  = 'none';
+      let type = document.getElementById('configType').value;
+      document.getElementById('insSubLabel').innerText = type + '教室 → 班番号';
+      document.getElementById('insRoom').innerText     = currentStudent.room;
+      document.getElementById('insGroup').innerText    = currentStudent.group;
 
       closeModal('confirmModal');
       document.getElementById('instructionModal').classList.add('active');
+      setTimeout(() => document.getElementById('btnNext').focus(), 50);
     }
 
     // ══════════════════════════════
@@ -662,15 +681,15 @@
     // ══════════════════════════════
     function reset() {
       closeModal('instructionModal');
+      closeModal('confirmModal');
       document.getElementById('pNumInput').value = '';
       currentStudent = null;
+      // 番号入力欄に自動でフォーカスを戻す
+      document.getElementById('pNumInput').focus();
     }
 
     function closeModal(id) {
       document.getElementById(id).classList.remove('active');
-      if (id === 'confirmModal') {
-        document.getElementById('pNumInput').value = '';
-      }
     }
 
     // 初期化
