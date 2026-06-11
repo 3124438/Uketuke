@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>イベント受付システム</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:    #1a73e8;
+      --green:   #34a853;
+      --red:     #d93025;
+      --gray:    #5f6368;
+      --bg:      #f0f2f5;
+      --white:   #ffffff;
+      --shadow:  0 4px 16px rgba(0,0,0,0.10);
+    }
+
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif;
+      background: var(--bg);
+      color: #333;
+    }
+
+    /* ══════════════════════════════
+       カメラエリア（最上部）
+    ══════════════════════════════ */
+    #camera-area {
+      width: 100%;
+      height: 280px;
+      background: #0d1117;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #camera-iframe {
+      width: 100%; height: 100%;
+      border: none;
+      display: none;
+    }
+
+    /* カメラ起動前のプレースホルダー */
+    #camera-placeholder {
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    #camera-placeholder .icon {
+      font-size: 48px;
+      opacity: 0.5;
+    }
+    #camera-placeholder p {
+      color: rgba(255,255,255,0.45);
+      font-size: 14px;
+      letter-spacing: 0.03em;
+    }
+    #start-camera-btn {
+      background: var(--green);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 32px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: background 0.15s;
+    }
+    #start-camera-btn:hover { background: #2d9249; }
+
+    /* スキャン成功フラッシュ（親ページ側） */
+    #scan-flash {
+      display: none;
+      position: absolute;
+      bottom: 14px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--green);
+      color: white;
+      font-size: 22px;
+      font-weight: bold;
+      padding: 8px 28px;
+      border-radius: 8px;
+      letter-spacing: 4px;
+      pointer-events: none;
+      animation: slideUp 0.2s ease-out;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* ══════════════════════════════
+       設定バー（カメラ直下）
+    ══════════════════════════════ */
+    #config-bar {
+      background: #1e2a38;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .config-select-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .config-select-wrap label {
+      color: rgba(255,255,255,0.55);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .config-select-wrap select,
+    .config-select-wrap input {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+      border-radius: 4px;
+      padding: 5px 8px;
+      font-size: 14px;
+      outline: none;
+    }
+    .config-select-wrap input {
+      width: 60px;
+      text-align: center;
+    }
+    #mode-badge {
+      background: rgba(26,115,232,0.25);
+      color: #8ab4f8;
+      border: 1px solid rgba(26,115,232,0.4);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    /* ══════════════════════════════
+       メインカード
+    ══════════════════════════════ */
+    .card {
+      max-width: 480px;
+      margin: 24px auto;
+      background: var(--white);
+      border-radius: 16px;
+      padding: 28px 32px;
+      box-shadow: var(--shadow);
+    }
+
+    .card h1 {
+      font-size: 20px;
+      color: var(--blue);
+      margin-bottom: 20px;
+      letter-spacing: 0.02em;
+    }
+
+    .input-label {
+      font-size: 13px;
+      font-weight: bold;
+      color: var(--gray);
+      margin-bottom: 8px;
+    }
+
+    #pNumInput {
+      width: 100%;
+      font-size: 36px;
+      padding: 12px 16px;
+      text-align: center;
+      border: 3px solid #dadce0;
+      border-radius: 10px;
+      letter-spacing: 10px;
+      color: #333;
+      background: white;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: 'Courier New', monospace;
+    }
+    #pNumInput:focus { border-color: var(--blue); }
+    #pNumInput.scanning { border-color: var(--green); background: #f0fff4; }
+
+    #check-btn {
+      width: 100%;
+      margin-top: 16px;
+      padding: 14px;
+      background: var(--blue);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: background 0.15s;
+    }
+    #check-btn:hover { background: #1558b0; }
+    #check-btn:disabled { background: #a8c7fa; cursor: not-allowed; }
+
+    /* ══════════════════════════════
+       モーダル共通
+    ══════════════════════════════ */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      justify-content: center;
+      align-items: center;
+      z-index: 900;
+      padding: 16px;
+    }
+    .modal-overlay.active { display: flex; }
+
+    .modal-box {
+      background: white;
+      border-radius: 20px;
+      padding: 28px 28px 24px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+      animation: modalIn 0.18s ease-out;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.93) translateY(12px); }
+      to   { opacity: 1; transform: scale(1)    translateY(0); }
+    }
+
+    .modal-box.is-mismatch {
+      background: #fce8e6;
+      border: 4px solid var(--red);
+    }
+
+    /* 確認モーダル */
+    .modal-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: var(--blue);
+      margin-bottom: 16px;
+    }
+    .modal-title.is-error { color: var(--red); font-size: 22px; }
+
+    .info-row {
+      display: flex;
+      align-items: baseline;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 20px;
+    }
+    .info-row:last-of-type { border-bottom: none; }
+    .info-row .lbl {
+      font-size: 13px;
+      color: var(--gray);
+      font-weight: bold;
+      width: 52px;
+      flex-shrink: 0;
+    }
+    .info-row .val { color: #111; font-weight: 500; }
+
+    .mismatch-alert {
+      display: none;
+      background: white;
+      border: 2px dashed var(--red);
+      border-radius: 8px;
+      color: var(--red);
+      font-size: 16px;
+      font-weight: bold;
+      padding: 10px 14px;
+      margin: 14px 0 0;
+      line-height: 1.5;
+    }
+
+    .modal-btns {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .btn-ok {
+      flex: 1; padding: 13px;
+      background: var(--blue); color: white;
+      border: none; border-radius: 8px;
+      font-size: 17px; font-weight: bold; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-ok:hover { background: #1558b0; }
+    .btn-ok.is-danger { background: var(--red); }
+    .btn-ok.is-danger:hover { background: #b3261e; }
+    .btn-ok:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-cancel {
+      flex: 1; padding: 13px;
+      background: #e8eaed; color: #444;
+      border: none; border-radius: 8px;
+      font-size: 17px; font-weight: bold; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-cancel:hover { background: #dadce0; }
+    .btn-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* 案内モーダル */
+    .navi-header {
+      font-size: 22px;
+      font-weight: bold;
+      color: var(--green);
+      margin-bottom: 16px;
+    }
+    .navi-header.is-error { color: var(--red); }
+
+    .navi-box {
+      background: #f8f9fa;
+      border: 2px solid #dadce0;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .navi-box.is-error {
+      background: #fce8e6;
+      border-color: var(--red);
+    }
+    .navi-sub {
+      font-size: 14px;
+      color: var(--gray);
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    .navi-sub.is-error { color: var(--red); }
+    .navi-value {
+      font-size: 52px;
+      font-weight: bold;
+      color: var(--blue);
+      line-height: 1.1;
+    }
+    .navi-value.is-error {
+      color: var(--red);
+      font-size: 32px;
+    }
+
+    .btn-next {
+      width: 100%;
+      padding: 16px;
+      background: var(--green);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      transition: background 0.15s;
+    }
+    .btn-next:hover { background: #2d9249; }
+
+    /* ══════════════════════════════
+       レスポンシブ
+    ══════════════════════════════ */
+    @media (max-width: 500px) {
+      .card { margin: 16px; border-radius: 12px; padding: 20px 18px; }
+      #camera-area { height: 240px; }
+      .navi-value { font-size: 40px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ① カメラエリア -->
+  <div id="camera-area">
+    <div id="camera-placeholder">
+      <div class="icon">📷</div>
+      <p>カメラを起動してQRコードで受付</p>
+      <button id="start-camera-btn" onclick="startCamera()">カメラを起動</button>
+    </div>
+    <iframe id="camera-iframe" allow="camera" sandbox="allow-scripts allow-same-origin"></iframe>
+    <div id="scan-flash"></div>
+  </div>
+
+  <!-- ② 設定バー -->
+  <div id="config-bar">
+    <div class="config-select-wrap">
+      <label>日程</label>
+      <select id="configDay" onchange="updateBadge()">
+        <option value="1日目">1日目</option>
+        <option value="2日目">2日目</option>
+      </select>
+    </div>
+    <div class="config-select-wrap">
+      <label>タイプ</label>
+      <select id="configType" onchange="updateBadge()">
+        <option value="OS">OS</option>
+        <option value="DX">DX</option>
+      </select>
+    </div>
+    <div class="config-select-wrap">
+      <label>教室</label>
+      <input type="text" id="configRoom" placeholder="01" maxlength="3" oninput="updateBadge()">
+    </div>
+    <div id="mode-badge">1日目 | OS | 全教室</div>
+  </div>
+
+  <!-- ③ 入力カード -->
+  <div class="card">
+    <h1>イベント当日の受付</h1>
+    <div class="input-label">個人番号（4桁）</div>
+    <input
+      type="text" id="pNumInput"
+      maxlength="4" placeholder="0000"
+      inputmode="numeric"
+      onkeypress="if(event.key==='Enter') doCheck()"
+    >
+    <button id="check-btn" onclick="doCheck()">照会する</button>
+  </div>
+
+  <!-- ④ 確認モーダル -->
+  <div id="confirmModal" class="modal-overlay">
+    <div class="modal-box" id="confirmBox">
+      <div id="conf-title-normal" class="modal-title">受付確認</div>
+      <div id="conf-title-error" class="modal-title is-error" style="display:none">⚠️ 場所が違います！</div>
+      <div class="info-row"><span class="lbl">学校</span><span class="val" id="confSchool"></span></div>
+      <div class="info-row"><span class="lbl">学年</span><span class="val" id="confGrade"></span></div>
+      <div class="info-row"><span class="lbl">名前</span><span class="val" id="confName"></span></div>
+      <div id="mismatchAlert" class="mismatch-alert"></div>
+      <div class="modal-btns">
+        <button id="btnOk" class="btn-ok" onclick="approve()">OK</button>
+        <button id="btnCancel" class="btn-cancel" onclick="closeModal('confirmModal')">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤ 案内モーダル -->
+  <div id="instructionModal" class="modal-overlay">
+    <div class="modal-box">
+
+      <!-- 正常 -->
+      <div id="ins-normal">
+        <div class="navi-header">受付完了　案内してください</div>
+        <div class="navi-box">
+          <div class="navi-sub" id="insSubLabel">OS教室 → 班番号</div>
+          <div class="navi-value"><span id="insRoom"></span>号室&thinsp;›&thinsp;<span id="insGroup"></span>班</div>
+        </div>
+      </div>
+
+      <!-- 場所違い -->
+      <div id="ins-mismatch" style="display:none">
+        <div class="navi-header is-error">⚠️ 正しい場所へ案内してください</div>
+        <div class="navi-box is-error">
+          <div class="navi-sub is-error">正しい受付場所</div>
+          <div class="navi-value is-error" id="insCorrectLocation"></div>
+        </div>
+      </div>
+
+      <button class="btn-next" onclick="reset()">OK（次の受付へ）</button>
+    </div>
+  </div>
+
+  <script>
+    // ══════════════════════════════
+    // 設定
+    // ══════════════════════════════
+
+    // ▼▼▼ GASのWebアプリURLをここに設定 ▼▼▼
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbyUy0yrxILZXpu7Z94hu55sloa8kGXpPm0d7LWvx7CJM4vjDnsGyiaxICJAtq-JU_onCg/exec';
+    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+    let currentStudent = null;
+
+    // ══════════════════════════════
+    // カメラ
+    // ══════════════════════════════
+    function startCamera() {
+      let iframe = document.getElementById('camera-iframe');
+      let ph     = document.getElementById('camera-placeholder');
+      // camera.htmlをiframeで読み込む（同じGitHub Pagesドメイン）
+      iframe.src = 'camera.html';
+      iframe.style.display = 'block';
+      ph.style.display = 'none';
+    }
+
+    // camera.htmlからのQR読み取り結果を受信
+    window.addEventListener('message', function(e) {
+      if (!e.data || e.data.type !== 'QR_SCANNED') return;
+      let num = String(e.data.num).trim();
+      if (!/^\d{4}$/.test(num)) return;
+
+      // フラッシュ表示
+      let flash = document.getElementById('scan-flash');
+      flash.innerText = '読取: ' + num;
+      flash.style.display = 'block';
+      setTimeout(function() { flash.style.display = 'none'; }, 1200);
+
+      // 入力欄にセット → 自動照会
+      document.getElementById('pNumInput').value = num;
+      document.getElementById('pNumInput').classList.add('scanning');
+      setTimeout(function() {
+        document.getElementById('pNumInput').classList.remove('scanning');
+      }, 800);
+      doCheck();
+    });
+
+    // ══════════════════════════════
+    // 設定バッジ
+    // ══════════════════════════════
+    function updateBadge() {
+      let day  = document.getElementById('configDay').value;
+      let type = document.getElementById('configType').value;
+      let room = document.getElementById('configRoom').value.trim();
+      document.getElementById('mode-badge').innerText =
+        day + ' | ' + type + ' | ' + (room ? room + '室' : '全教室');
+    }
+
+    // ══════════════════════════════
+    // 照会
+    // ══════════════════════════════
+    function doCheck() {
+      let pNum = document.getElementById('pNumInput').value.trim();
+      if (!pNum || pNum.length < 4) return;
+
+      let btn = document.getElementById('check-btn');
+      btn.disabled = true;
+      btn.innerText = '照会中...';
+
+      let config = {
+        currentDay:  document.getElementById('configDay').value,
+        currentType: document.getElementById('configType').value,
+        currentRoom: document.getElementById('configRoom').value.trim()
+      };
+
+      // GASをfetchで呼び出す（JSONPスタイル）
+      let url = GAS_URL
+        + '?action=search'
+        + '&pNum=' + encodeURIComponent(pNum)
+        + '&day='  + encodeURIComponent(config.currentDay)
+        + '&type=' + encodeURIComponent(config.currentType)
+        + '&room=' + encodeURIComponent(config.currentRoom)
+        + '&cb=handleSearch';
+
+      let script = document.createElement('script');
+      script.src = url;
+      script.onerror = function() {
+        alert('通信エラーが発生しました。');
+        resetBtn();
+      };
+      document.head.appendChild(script);
+    }
+
+    function handleSearch(result) {
+      resetBtn();
+      document.querySelectorAll('script[src*="action=search"]')
+        .forEach(function(s) { s.remove(); });
+
+      if (result.status === 'NOT_FOUND') {
+        alert(result.message);
+        document.getElementById('pNumInput').value = '';
+        return;
+      }
+
+      currentStudent = result.student;
+
+      document.getElementById('confSchool').innerText = result.student.school;
+      document.getElementById('confGrade').innerText  = result.student.grade;
+      document.getElementById('confName').innerText   = result.student.name;
+
+      let box        = document.getElementById('confirmBox');
+      let titleNorm  = document.getElementById('conf-title-normal');
+      let titleErr   = document.getElementById('conf-title-error');
+      let alert_el   = document.getElementById('mismatchAlert');
+      let okBtn      = document.getElementById('btnOk');
+
+      box.classList.remove('is-mismatch');
+      titleNorm.style.display = 'block';
+      titleErr.style.display  = 'none';
+      alert_el.style.display  = 'none';
+      okBtn.className = 'btn-ok';
+      currentStudent.isMismatch = false;
+
+      if (result.status === 'MISMATCH') {
+        box.classList.add('is-mismatch');
+        titleNorm.style.display = 'none';
+        titleErr.style.display  = 'block';
+        alert_el.innerText      = result.message;
+        alert_el.style.display  = 'block';
+        okBtn.className = 'btn-ok is-danger';
+        currentStudent.isMismatch      = true;
+        currentStudent.correctLocation = result.correctLocation;
+      }
+
+      document.getElementById('confirmModal').classList.add('active');
+    }
+
+    function resetBtn() {
+      let btn = document.getElementById('check-btn');
+      btn.disabled = false;
+      btn.innerText = '照会する';
+    }
+
+    // ══════════════════════════════
+    // 承認 → 出席フラグ書き込み
+    // ══════════════════════════════
+    function approve() {
+      if (!currentStudent) return;
+      let okBtn     = document.getElementById('btnOk');
+      let cancelBtn = document.getElementById('btnCancel');
+      okBtn.disabled     = true;
+      cancelBtn.disabled = true;
+      let prev = okBtn.innerText;
+      okBtn.innerText = '更新中...';
+
+      let url = GAS_URL
+        + '?action=flag'
+        + '&sheet=' + encodeURIComponent(currentStudent.sheetName)
+        + '&row='   + encodeURIComponent(currentStudent.rowNum)
+        + '&cb=handleFlag';
+
+      let script = document.createElement('script');
+      script.src = url;
+      script.onerror = function() {
+        alert('更新エラーが発生しました。');
+        okBtn.disabled     = false;
+        cancelBtn.disabled = false;
+        okBtn.innerText    = prev;
+      };
+      document.head.appendChild(script);
+    }
+
+    function handleFlag(response) {
+      document.querySelectorAll('script[src*="action=flag"]')
+        .forEach(function(s) { s.remove(); });
+
+      document.getElementById('btnOk').disabled     = false;
+      document.getElementById('btnCancel').disabled = false;
+      document.getElementById('btnOk').innerText    = 'OK';
+
+      if (response.status === 'ERROR') {
+        alert('更新に失敗しました: ' + response.message);
+        return;
+      }
+
+      // 案内画面表示
+      let normArea = document.getElementById('ins-normal');
+      let misArea  = document.getElementById('ins-mismatch');
+
+      if (currentStudent.isMismatch) {
+        normArea.style.display = 'none';
+        misArea.style.display  = 'block';
+        document.getElementById('insCorrectLocation').innerText = currentStudent.correctLocation;
+      } else {
+        normArea.style.display = 'block';
+        misArea.style.display  = 'none';
+        let type = document.getElementById('configType').value;
+        document.getElementById('insSubLabel').innerText = type + '教室 → 班番号';
+        document.getElementById('insRoom').innerText     = currentStudent.room;
+        document.getElementById('insGroup').innerText    = currentStudent.group;
+      }
+
+      closeModal('confirmModal');
+      document.getElementById('instructionModal').classList.add('active');
+    }
+
+    // ══════════════════════════════
+    // リセット・モーダル
+    // ══════════════════════════════
+    function reset() {
+      closeModal('instructionModal');
+      document.getElementById('pNumInput').value = '';
+      currentStudent = null;
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+      if (id === 'confirmModal') {
+        document.getElementById('pNumInput').value = '';
+      }
+    }
+
+    // 初期化
+    updateBadge();
+  </script>
+</body>
+</html>
